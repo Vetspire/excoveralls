@@ -5,7 +5,7 @@ defmodule ExCoveralls.HtmlTest do
   alias ExCoveralls.Html
 
   @file_name "excoveralls.html"
-  @file_size 20375
+  @file_size 20381
   @test_output_dir "cover_test/"
   @test_template_path "lib/templates/html/htmlcov/"
 
@@ -13,7 +13,8 @@ defmodule ExCoveralls.HtmlTest do
   @counts      [0, 1, nil, nil]
   @source_info [%{name: "test/fixtures/test.ex",
                  source: @content,
-                 coverage: @counts
+                 coverage: @counts,
+                 warnings: []
                }]
 
   @stats_result "" <>
@@ -35,7 +36,7 @@ defmodule ExCoveralls.HtmlTest do
         File.rm!(path)
         File.rmdir!(@test_output_dir)
       end
-      
+
       ExCoveralls.ConfServer.clear()
     end
 
@@ -66,6 +67,41 @@ defmodule ExCoveralls.HtmlTest do
     assert(File.read!(report) =~ "id='test/fixtures/test.ex'")
     %{size: size} = File.stat! report
     assert(size == @file_size)
+  end
+
+  @tag :skip
+  test_with_mock "Exit status code is 1 when actual coverage does not reach the minimum",
+      ExCoveralls.Settings, [
+        get_coverage_options: fn -> coverage_options(100) end,
+        get_file_col_width: fn -> 40 end,
+        get_print_summary: fn -> true end,
+        get_print_files: fn -> true end
+      ] do
+    output = capture_io(fn ->
+      assert catch_exit(Html.execute(@source_info)) == {:shutdown, 1}
+    end)
+    assert String.contains?(output, "FAILED: Expected minimum coverage of 100%, got 50.0%.")
+  end
+
+  @tag :skip
+  test_with_mock "Exit status code is 0 when actual coverage reaches the minimum",
+      ExCoveralls.Settings, [
+        get_coverage_options: fn -> coverage_options(49.9) end,
+        get_file_col_width: fn -> 40 end,
+        get_print_summary: fn -> true end,
+        get_print_files: fn -> true end
+      ] do
+    assert capture_io(fn ->
+      Html.execute(@source_info)
+    end) =~ @stats_result
+  end
+
+  defp coverage_options(minimum_coverage) do
+    %{
+      "minimum_coverage" => minimum_coverage,
+      "output_dir" => @test_output_dir,
+      "template_path" => @test_template_path
+    }
   end
 
 end

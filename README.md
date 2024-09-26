@@ -46,7 +46,8 @@ def project do
       coveralls: :test,
       "coveralls.detail": :test,
       "coveralls.post": :test,
-      "coveralls.html": :test
+      "coveralls.html": :test,
+      "coveralls.cobertura": :test
     ]
     # if you want to use espec,
     # test_coverage: [tool: ExCoveralls, test_task: "espec"]
@@ -55,7 +56,7 @@ end
 
 defp deps do
   [
-    {:excoveralls, "~> 0.10", only: :test},
+    {:excoveralls, "~> 0.18", only: :test},
   ]
 end
 ```
@@ -88,16 +89,20 @@ end
     - [[mix coveralls.html] Show coverage as HTML report](#mix-coverallshtml-show-coverage-as-html-report)
     - [[mix coveralls.json] Show coverage as JSON report](#mix-coverallsjson-show-coverage-as-json-report)
     - [[mix coveralls.xml] Show coverage as XML report](#mix-coverallsxml-show-coverage-as-xml-report)
+    - [[mix coveralls.cobertura] Show coverage as Cobertura report](#mix-coverallscobertura-show-coverage-as-cobertura-report)
     - [[mix coveralls.lcov] Show coverage as lcov report (Experimental)](#mix-coverallslcov-show-coverage-as-lcov-report-experimental)
   - [coveralls.json](#coverallsjson)
-      - [Stop Words](#stop-words)
-      - [Exclude Files](#exclude-files)
-      - [Terminal Report Output](#terminal-report-output)
-      - [Coverage Options](#coverage-options)
+    - [Stop Words](#stop-words)
+    - [Exclude Files](#exclude-files)
+    - [Terminal Report Output](#terminal-report-output)
+    - [Coverage Options](#coverage-options)
+  - [Other Considerations](#other-considerations)
     - [Ignore Lines](#ignore-lines)
+    - [Silence OTP Cover Warnings](#silence-otp-cover-warnings)
+    - [Merging Coverage Results](#merging-coverage-results)
     - [Notes](#notes)
     - [Todo](#todo)
-  - [License](#license)
+- [License](#license)
 
 ### [mix coveralls] Show coverage
 Run the `MIX_ENV=test mix coveralls` command to show coverage information on localhost.
@@ -145,7 +150,8 @@ Usage: mix coveralls <Options>
                         and your git repo resides in "app", then the root path should be: "/home/runs/app/" (from
                         coveralls.io)
     --flagname          Job flag name which will be shown in the Coveralls UI
-    --import_cover      Directory from where '.coverdata' files should be imported and their results added to the report
+    --import-cover      Directory from where '.coverdata' files should be imported and their results added to the report.
+                        Coverdata is imported after tests are run.
 
 Usage: mix coveralls.detail [--filter file-name-pattern]
   Used to display coverage with detail
@@ -362,6 +368,13 @@ Output to the shell is the same as running the command `mix coveralls` (to suppr
 
 Output reports are written to `cover/excoveralls.xml` by default, however, the path can be specified by overwriting the `"output_dir"` coverage option.
 
+### [mix coveralls.cobertura] Show coverage as Cobertura report
+This task displays coverage information at the source-code level formatted as a [Cobertura](https://cobertura.github.io/cobertura/) document.
+The report follows a format supported by [Gitlab](https://docs.gitlab.com/ee/ci/testing/test_coverage_visualization.html) code coverage visualization.
+Output to the shell is the same as running the command `mix coveralls` (to suppress this output, add `"print_summary": false` to your project's `coveralls.json` file). In a similar manner to `mix coveralls.detail`, reported source code can be filtered by specifying arguments using the `--filter` flag.
+
+Output reports are written to `cover/cobertura.xml` by default, however, the path can be specified by overwriting the `"output_dir"` coverage option.
+
 ### [mix coveralls.lcov] Show coverage as lcov report (Experimental)
 This task displays coverage information at the line level formatted as a lcov.
 The report follows a format supported by several code coverage services like VSCode extension(`ryanluker.vscode-coverage-gutters`).
@@ -432,6 +445,9 @@ to `false`:
   - When used in conjunction with `minimum_coverage`, overall project coverage is checked first before individual file coverages are checked.
 - `html_filter_full_covered`
   - A boolean, when `true` files with 100% coverage are not shown in the HTML report. Default to `false`.
+- `floor_coverage`
+  - A boolean, when `false` coverage values are ceiled instead of floored, this means that a project with some lines
+    that are not covered can still have a total 100% coverage. Default to `true`.
 
 Example configuration file:
 
@@ -460,6 +476,8 @@ Example configuration file:
   }
 }
 ```
+
+## Other Considerations
 
 ### Ignore Lines
 
@@ -501,6 +519,68 @@ imported_info(_Text,_Module,_Imported) ->
     ok.
 ```
 
+### Merging Coverage Results
+
+ExCoveralls can include `.coverdata` files in the result of the current test run through the `--import-cover` flag. This can be used to include coverage data from partitioned tests or integration tests that may run in a subprocess, for instance.
+
+Coverage data is generated when running `mix test --cover`, optionally with the `--export-coverage` flag to specify an output name.
+
+```shell
+$ mix test --only integration --cover --export-coverage integration-coverage
+Excluding tags: [:test]
+Including tags: [:integration]
+... test run omitted ...
+# Coverage data written to cover/integration-coverage.coverdata
+
+# Report coverage, do not run integration tests
+$ mix coveralls --exclude integration
+Excluding tags: [:integration]
+... test run omitted ...
+
+----------------
+COV    FILE                                        LINES RELEVANT   MISSED
+...
+[TOTAL]  80.2% # <-- This result does not include coverage from integration tests
+----------------
+
+# Report coverage, do not run integration tests, but include previously written coverdata
+$ mix coveralls --exclude integration --import-cover cover
+Excluding tags: [:integration]
+... test run omitted ...
+
+----------------
+COV    FILE                                        LINES RELEVANT   MISSED
+...
+[TOTAL]  95.3% # <-- This result now includes coverage from integration tests
+----------------
+```
+
+Coverage data is imported after tests are run.
+
+See the `mix test` [Coverage documentation](https://hexdocs.pm/mix/Mix.Tasks.Test.html#module-coverage) for more information on `.coverdata`.
+
+### Configuring HTTP Options in ExCoveralls
+
+You can customize the HTTP options used by [`:httpc`](https://www.erlang.org/doc/man/httpc.html) when posting results. The example below shows how to specify a custom `cacertfile`:
+
+```elixir
+config :excoveralls,
+  http_options: [
+    timeout: 10_000,
+    ssl: [
+      # Refer to the secure coding guide:
+      # https://erlef.github.io/security-wg/secure_coding_and_deployment_hardening/inets
+      verify: :verify_peer,
+      depth: 2,
+      customize_hostname_check: [
+        match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+      ],
+      cacertfile: to_charlist(System.fetch_env!("TEST_COVERAGE_CACERTFILE"))
+    ]
+```
+
+By default, ExCoveralls uses the `cacertfile` from [`castore`](https://hexdocs.pm/castore/api-reference.html) when the dependency is installed. If it's not available and you're running Erlang `25` or later, the system will attempt to use the OS certificates via [`:public_key.cacerts_load/0`](https://www.erlang.org/doc/man/public_key.html#cacerts_load-0).
+
 ### Notes
 - If mock library is used, it will show some warnings during execution.
     - https://github.com/eproxus/meck/pull/17
@@ -512,6 +592,6 @@ imported_info(_Text,_Module,_Imported) ->
 - It might not work well on projects which handle multiple project (Mix.Project) files.
     - Needs improvement on file-path handling.
 
-## License
+# License
 
 This source code is licensed under the MIT license. Copyright (c) 2013-present, parroty.
