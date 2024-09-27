@@ -6,8 +6,8 @@ defmodule ExCoveralls.Mixfile do
   def project do
     [
       app: :excoveralls,
-      version: "0.16.0",
-      elixir: "~> 1.3",
+      version: "0.18.3",
+      elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       docs: docs(),
@@ -30,16 +30,17 @@ defmodule ExCoveralls.Mixfile do
   end
 
   def application do
-    [extra_applications: [:eex, :tools, :xmerl]]
+    [extra_applications: [:eex, :tools, :xmerl, :inets, :ssl, :public_key]]
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/fixtures/test_missing.ex"]
   defp elixirc_paths(_), do: ["lib"]
 
-  def deps do
+  defp deps do
     [
+      {:castore, "~> 1.0", optional: true},
       {:jason, "~> 1.0"},
-      {:hackney, "~> 1.16"},
+      {:bypass, "~> 2.1.0", only: :test},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:meck, "~> 0.8", only: :test},
       {:mock, "~> 0.3.6", only: :test},

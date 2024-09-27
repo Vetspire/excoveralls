@@ -156,14 +156,12 @@ defmodule ExCoveralls.Cobertura do
   end
 
   defp module_name(source) do
-    case Regex.run(~r/^defmodule\s+(.*)\s+do$/m, source, capture: :all_but_first) do
-      [module] ->
-        module
-
-      _ ->
-        [module] = Regex.run(~r/^-module\((.*)\)\.$/m, source, capture: :all_but_first)
-        module
-    end
+    with nil <- Regex.run(~r/^def(?:module|protocol|impl)\s+(.*)\s+do$/m, source, capture: :all_but_first),
+         nil <- Regex.run(~r/^-module\((.*)\)\.$/m, source, capture: :all_but_first) do
+     "UNKNOWN_MODULE"
+    else
+     [module] -> module
+    end  
   end
 
   defp package_name(path, c_paths) do
@@ -172,7 +170,7 @@ defmodule ExCoveralls.Cobertura do
     c_paths
     |> Enum.find_value(package_name, fn c_path ->
       if String.starts_with?(package_name, c_path) do
-        String.slice(package_name, (String.length(c_path) + 1)..-1)
+        String.slice(package_name, get_slice_range_for_package_name(c_path))
       else
         false
       end
@@ -180,6 +178,14 @@ defmodule ExCoveralls.Cobertura do
     |> Path.split()
     |> Enum.join(".")
     |> to_charlist()
+  end
+
+  # TODO: Remove when we require Elixir 1.12 as minimum and inline it with range syntax
+  if Version.match?(System.version(), ">= 1.12.0") do
+    # We use Range.new/3 because using x..y//step would give a syntax error on Elixir < 1.12
+    defp get_slice_range_for_package_name(c_path), do: Range.new(String.length(c_path) + 1, -1, 1)
+  else
+    defp get_slice_range_for_package_name(c_path), do: Range.new(String.length(c_path) + 1, -1)
   end
 
   defp rate(valid_lines) when length(valid_lines) == 0, do: 0.0

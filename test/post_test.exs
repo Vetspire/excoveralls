@@ -7,7 +7,8 @@ defmodule ExCoveralls.PostTest do
   @counts      [0, 1, nil, nil]
   @source_info [%{name: "test/fixtures/test.ex",
                   source: @content,
-                  coverage: @counts
+                  coverage: @counts,
+                  warnings: []
                }]
 
   test_with_mock "execute", ExCoveralls.Poster, [execute: fn(_, _) -> "result" end] do
@@ -34,15 +35,23 @@ defmodule ExCoveralls.PostTest do
         flagname: "arbitrary_value"
       ])
 
-    assert json ==
-      "{\"flag_name\":\"arbitrary_value\",\"git\":{\"branch\":\"\",\"head\":{\"committer_name\":\"\",\"id\":\"\",\"message\":\"\"}}," <>
-         "\"parallel\":null," <>
-         "\"repo_token\":\"1234567890\"," <>
-         "\"service_name\":\"local\"," <>
-         "\"service_number\":\"build_num_1\"," <>
-         "\"source_files\":" <>
-           "[{\"coverage\":[0,1,null,null]," <>
-             "\"name\":\"test/fixtures/test.ex\"," <>
-             "\"source\":\"defmodule Test do\\n  def test do\\n  end\\nend\\n\"}]}"
+    assert Jason.decode!(json) == %{
+      "flag_name" => "arbitrary_value",
+      "git" => %{
+        "branch" => "",
+        "head" => %{"committer_name" => "", "id" => "", "message" => ""}
+      },
+      "parallel" => nil,
+      "repo_token" => "1234567890",
+      "service_name" => "local",
+      "service_number" => "build_num_1",
+      "source_files" => [
+        %{
+          "coverage" => [0, 1, nil, nil],
+          "name" => "test/fixtures/test.ex",
+          "source" => "defmodule Test do\n  def test do\n  end\nend\n"
+        }
+      ]
+    }
   end
 end
