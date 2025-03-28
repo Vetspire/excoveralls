@@ -1,3 +1,16 @@
+0.18.5
+------
+#### Changes
+- Fix Json output name when export isn't set (#337)
+
+0.18.4
+------
+#### Enhancements
+- Add Custom Filename support for coveralls.json (#335)
+
+#### Changes
+- Elixir 1.18 compatibility (#333)
+
 0.18.3
 ------
 #### Changes
